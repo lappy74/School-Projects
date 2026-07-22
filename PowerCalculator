@@ -1,0 +1,148 @@
+# Vinci Jahniel Aure Power Calculator for Solar Systems
+# Theoretical Computation for Solar Panel and LiPo Battery Sizing
+# The purpose of the script is to size a Solar Panel and
+# LiPo Battery from known parameters for a sustainable circuit.
+# This script takes into account the use of a TP4056 Charging IC.
+
+def get_float(prompt):
+    while True:
+        try:
+            return float(input(prompt))
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+
+def get_optional_float(prompt):
+    value = input(prompt)
+
+    if value.strip() == "":
+        return None
+
+    try:
+        return float(value)
+    except ValueError:
+        print("Invalid input. Skipping this optional value.")
+        return None
+
+# User Inputs
+BattV = get_float("Enter battery voltage (V): ") # Battery Nominal Voltage rating
+TCE = get_float("Enter TP4056/Charging Board efficiency (e.g. 0.85): ") # TP4056 charging efficiency
+MaxSunlight = get_float("Enter effective sunlight hours per day: ") # Effective sunlight hours per day
+Usoc = get_float("Enter usable state of charge (e.g. 0.80): ") # Usable state of charge
+BatteryE = get_float("Enter battery efficiency (e.g. 0.90): ") # Battery efficiency
+V_load = get_float("Enter load voltage (V): ") # Load voltage
+I_active = get_float("Enter active current of system/device total (A): ") # Active current of system/device total
+ActiveH = get_float("How many hours per day is your system active?: ") # Hours per day system is active
+I_sleep = get_float("Enter sleep current of device (A): ") # Sleep current of device
+SleepH = get_float("How many hours per day is your system inactive?: ") # Hours per day system is sleeping
+
+# Uncomment the three lines if there is a Lora Module to take into account
+# I_Lora = get_float("LoRa peak current draw (A): ") # LoRa peak current draw
+# MaxT = get_float("How long is LoRa active per trigger (s): ") # Duration LoRa is active per trigger
+# Trigger = get_float("How many LoRa triggers per day?: ") # Number of LoRa triggers per day
+
+# Uncomment if a Buck-Converter at the input is a needed parameter
+# BuckE = get_float("Enter buck converter efficiency (e.g. 0.90): ") # Buck converter efficiency
+
+# Optional: theoretical battery capacity for runtime check
+ActualBatt_mAh = get_optional_float(
+    "Enter actual battery capacity to test runtime, in mAh (leave blank to skip): "
+)
+
+# Optional panel wattage input
+PanelProvidedW = get_optional_float(
+    "Enter panel wattage (leave blank if unknown): "
+)
+
+# Load Calculations
+# Uncomment if there is a Lora Module
+# LoraHours = (MaxT * Trigger) / 3600  # total LoRa active time per day in hours
+# Energy_Lora = V_load * I_Lora * LoraHours         # Wh/day
+
+Energy_active = V_load * I_active * ActiveH       # Wh/day
+Energy_sleep = V_load * I_sleep * SleepH          # Wh/day
+
+# add Energy_Lora when there is a Lora Module
+Energy_load = Energy_active + Energy_sleep   # Wh/day
+
+I_loadAVG = Energy_load / (V_load * 24)           # average current over 24 hours
+Power_loadAVG = V_load * I_loadAVG                # average watts over 24 hours
+
+# Battery Sizing
+Energy_Battery_Size = Energy_load / (Usoc * BatteryE)  # Wh
+Battery_Capacity_Ah = Energy_Battery_Size / BattV      # Ah
+Battery_Capacity_mAh = Battery_Capacity_Ah * 1000      # mAh
+
+# Solar Panel Sizing
+# Multiply * BuckE to denominator of Energy_Panel_Size if there is a Buck-Conveter
+Energy_Panel_Size = Energy_load / (TCE * BatteryE)     # Wh/day
+Min_Panel_Size = Energy_Panel_Size / MaxSunlight       # W
+
+# Display Results
+print("\nRESULTS")
+print(f"Active Energy: {Energy_active:.6f} Wh/day")
+print(f"Sleep Energy: {Energy_sleep:.6f} Wh/day")
+
+# Uncomment if there is a Lora Module
+# print(f"LoRa Energy: {Energy_Lora:.6f} Wh/day")
+print(f"Total Daily Energy Consumption: {Energy_load:.6f} Wh/day")
+print(f"Average Load Current: {I_loadAVG:.6f} A ({I_loadAVG * 1000:.3f} mA)")
+print(f"Average Load Power: {Power_loadAVG:.6f} W")
+
+print("\nBattery Sizing:")
+print(f"Required Battery Energy: {Energy_Battery_Size:.6f} Wh")
+print(
+    f"Minimum Battery Capacity: {Battery_Capacity_Ah:.6f} Ah "
+    f"({Battery_Capacity_mAh:.0f} mAh)"
+)
+
+# Time to Discharge
+if ActualBatt_mAh is not None:
+    ActualBatt_Ah = ActualBatt_mAh / 1000                 # Ah
+    ActualBatt_Energy = ActualBatt_Ah * BattV             # Wh nameplate
+    ActualBatt_UsableEnergy = ActualBatt_Energy * Usoc * BatteryE  # Wh usable
+
+    TimeToDischarge_hr = ActualBatt_UsableEnergy / Power_loadAVG   # hours
+    TimeToDischarge_days = TimeToDischarge_hr / 24                 # days
+
+    print("\nTime to Discharge (Actual Battery, No Solar Input):")
+    print(
+        f"Actual Battery Capacity: {ActualBatt_mAh:.0f} mAh "
+        f"({ActualBatt_Energy:.6f} Wh Nameplate)"
+    )
+    print(f"Usable Battery Energy: {ActualBatt_UsableEnergy:.6f} Wh")
+    print(
+        f"Estimated Runtime: {TimeToDischarge_hr:.2f} hours "
+        f"({TimeToDischarge_days:.2f} days)"
+    )
+
+    if ActualBatt_mAh >= Battery_Capacity_mAh:
+        print("Result: Battery capacity is SUFFICIENT for >= 1 day of use.")
+    else:
+        print("Result: Battery capacity is BELOW the recommended minimum.")
+else:
+    print("\nRuntime check skipped.")
+
+print("\nSolar Panel Sizing:")
+print(f"Required Panel Energy: {Energy_Panel_Size:.6f} Wh/day")
+print(f"Minimum Panel Size: {Min_Panel_Size:.6f} W")
+
+# Optional Panel Verification
+if PanelProvidedW is not None:
+    Panel_Margin = PanelProvidedW / Min_Panel_Size
+    Energy_in_Panel = PanelProvidedW * MaxSunlight       # Wh/day
+
+    # Multiply * BuckE as well if there is a Buck-Converter to take into account
+    UsableE = Energy_in_Panel * TCE * BatteryE    # Wh/day after losses 
+    print("\nProvided Panel Analysis:")
+    print(f"Provided Panel Size: {PanelProvidedW:.3f} W")
+    print(f"Panel Margin: {Panel_Margin:.2f}x")
+    print(f"Energy Generated Per Day: {Energy_in_Panel:.6f} Wh/day")
+    print(f"Usable Energy After Losses: {UsableE:.6f} Wh/day")
+
+    if PanelProvidedW >= Min_Panel_Size:
+        print("Result: Panel is SUFFICIENT.")
+    else:
+        print("Result: Panel is NOT sufficient.")
+else:
+    print("\nNo panel wattage provided. Panel verification skipped.")
