@@ -1,0 +1,87 @@
+/*
+    Analog Discovery 2 Voltmeter Logger
+    Logs BOTH channels to a text file.
+
+    Output:
+    /home/viisha/Documents/Waveforms/BatteryTest/ad2_voltage_log.txt
+*/
+
+open("Voltmeter");
+
+// USER SETTINGS
+
+
+var interval_s = 180;      // Seconds between measurements
+var duration_s = 0;        // 0 = Run until Stop button
+
+var path = "/home/viisha/Documents/Waveforms/BatteryTest/ad2_voltage_log.txt";
+
+
+// INITIALIZE
+
+
+// Overwrite previous file
+FileWriteLine(
+    path,
+    "Elapsed_s\tCH1_V\tCH2_V"
+);
+
+print("Logging to:");
+print(path);
+
+Voltmeter.run();
+
+// Allow the voltmeter to begin updating
+wait(0.5);
+
+// MAIN LOOP
+
+
+var start_ms = new Date().getTime();
+var count = 0;
+
+while (true)
+{
+    var now_ms = new Date().getTime();
+    var elapsed = (now_ms - start_ms) / 1000.0;
+
+    if (duration_s > 0 && elapsed >= duration_s)
+        break;
+
+    // Update voltmeter values
+    Voltmeter.read();
+
+    // Read both channels
+    var ch1 = Number(Voltmeter.Input.Channel1.C1.value);
+    var ch2 = Number(Voltmeter.Input.Channel2.C2.value);
+
+    // Save to file
+    FileAppendLine(
+        path,
+        elapsed.toFixed(3) + "\t" +
+        ch1.toFixed(6) + "\t" +
+        ch2.toFixed(6)
+    );
+
+    // Print to console
+    print(
+        elapsed.toFixed(3) +
+        " s    CH1 = " +
+        ch1.toFixed(6) +
+        " V    CH2 = " +
+        ch2.toFixed(6) +
+        " V"
+    );
+
+    count++;
+
+    // Wait before next measurement
+    if (!wait(interval_s))
+        break;
+}
+
+print("");
+print("Finished.");
+print("Measurements logged: " + count);
+print("Saved to:");
+print(path);
